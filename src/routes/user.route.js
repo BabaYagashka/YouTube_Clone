@@ -48,5 +48,16 @@ router
 
 router.route("/channel/:username").get(verifyJWT, getUserChannelProfile);
 router.route("/watch-history").get(verifyJWT, getWatchHistory);
+router.route("/search").get(verifyJWT, async (req, res) => {
+  const { query } = req.query;
+  const users = await User.find({
+    $or: [
+      { username: { $regex: query, $options: "i" } },
+      { fullname: { $regex: query, $options: "i" } },
+    ],
+  }).select("username fullname avatar");
+
+  return res.status(200).json(new ApiResponse(200, users, "Users fetched!"));
+});
 
 export default router;

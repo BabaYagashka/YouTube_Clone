@@ -11,14 +11,14 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
   const pipeline = [];
 
+  // ✅ simple regex search instead of Atlas search
   if (query) {
     pipeline.push({
-      $search: {
-        index: "search-videos",
-        text: {
-          query: query,
-          path: ["title", "description"],
-        },
+      $match: {
+        $or: [
+          { title: { $regex: query, $options: "i" } },
+          { description: { $regex: query, $options: "i" } },
+        ],
       },
     });
   }
@@ -34,14 +34,11 @@ const getAllVideos = asyncHandler(async (req, res) => {
     });
   }
 
-  // fetch only published videos
   pipeline.push({ $match: { isPublished: true } });
 
   if (sortBy && sortType) {
     pipeline.push({
-      $sort: {
-        [sortBy]: sortType === "asc" ? 1 : -1,
-      },
+      $sort: { [sortBy]: sortType === "asc" ? 1 : -1 },
     });
   } else {
     pipeline.push({ $sort: { createdAt: -1 } });
@@ -56,26 +53,19 @@ const getAllVideos = asyncHandler(async (req, res) => {
         as: "ownerDetails",
         pipeline: [
           {
-            $project: {
-              username: 1,
-              avatar: 1,
-            },
+            $project: { username: 1, avatar: 1 },
           },
         ],
       },
     },
-    {
-      $unwind: "$ownerDetails",
-    }
+    { $unwind: "$ownerDetails" }
   );
 
   const videoAggregate = Video.aggregate(pipeline);
-
   const options = {
     page: parseInt(page, 10),
     limit: parseInt(limit, 10),
   };
-
   const videos = await Video.aggregatePaginate(videoAggregate, options);
 
   return res
