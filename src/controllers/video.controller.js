@@ -11,7 +11,6 @@ const getAllVideos = asyncHandler(async (req, res) => {
 
   const pipeline = [];
 
-  // ✅ simple regex search instead of Atlas search
   if (query) {
     pipeline.push({
       $match: {
@@ -45,6 +44,19 @@ const getAllVideos = asyncHandler(async (req, res) => {
   }
 
   pipeline.push(
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "video",
+        as: "likes",
+      },
+    },
+    {
+      $addFields: {
+        likesCount: { $size: "$likes" },
+      },
+    },
     {
       $lookup: {
         from: "users",
@@ -210,15 +222,15 @@ const getVideoById = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Video not found!");
   }
 
-  // increment views
   await Video.findByIdAndUpdate(videoId, {
     $inc: { views: 1 },
   });
 
-  // add to watch history
-  await User.findByIdAndUpdate(req.user._id, {
-    $addToSet: { watchHistory: videoId },
-  });
+  if (req.user?._id) {
+    await User.findByIdAndUpdate(req.user._id, {
+      $addToSet: { watchHistory: videoId },
+    });
+  }
 
   return res
     .status(200)
@@ -248,7 +260,7 @@ const updateVideo = asyncHandler(async (req, res) => {
   }
 
   const thumbnailLocalPath = req.file?.path;
-  let thumbnail = video.thumbnail; // keep old thumbnail by default
+  let thumbnail = video.thumbnail;
 
   if (thumbnailLocalPath) {
     const newThumbnail = await uploadOnCloudinary(thumbnailLocalPath);
@@ -260,13 +272,7 @@ const updateVideo = asyncHandler(async (req, res) => {
 
   const updatedVideo = await Video.findByIdAndUpdate(
     videoId,
-    {
-      $set: {
-        title,
-        description,
-        thumbnail,
-      },
-    },
+    { $set: { title, description, thumbnail } },
     { new: true }
   );
 
@@ -318,11 +324,7 @@ const togglePublishStatus = asyncHandler(async (req, res) => {
 
   const updatedVideo = await Video.findByIdAndUpdate(
     videoId,
-    {
-      $set: {
-        isPublished: !video.isPublished,
-      },
-    },
+    { $set: { isPublished: !video.isPublished } },
     { new: true }
   );
 
